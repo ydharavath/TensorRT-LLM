@@ -340,8 +340,24 @@ size_t CutlassFp4GemmRunner<T, fp4GemmType>::dispatchToArch(T* D, void const* A,
 {
     if constexpr (fp4GemmType == FP4GemmType::W4A8_MXFP4_MXFP8)
     {
-        if (mSm == 100 || mSm == 103 || mSm == 110)
+        if (mSm == 100)
         {
+            return dispatchMXFP8xMXFP4GemmCTAShapeSm100<T>(D, A, B, input_sf, weight_sf, global_sf, m, n, k,
+                batch_count, gemmConfig, workspace, workspaceBytes, stream, occupancy);
+        }
+        else if (mSm == 103)
+        {
+#ifdef EXCLUDE_SM_103
+            throw std::runtime_error(
+                "[TensorRT-LLM Error][CutlassFp4GemmRunner][GEMM Dispatch] SM103 is excluded from this build");
+#else
+            return dispatchMXFP8xMXFP4GemmCTAShapeSm100<T>(D, A, B, input_sf, weight_sf, global_sf, m, n, k,
+                batch_count, gemmConfig, workspace, workspaceBytes, stream, occupancy);
+#endif
+        }
+        else if (mSm == 110)
+        {
+            // SM110 falls back to SM100 kernels (architecturally compatible)
             return dispatchMXFP8xMXFP4GemmCTAShapeSm100<T>(D, A, B, input_sf, weight_sf, global_sf, m, n, k,
                 batch_count, gemmConfig, workspace, workspaceBytes, stream, occupancy);
         }
@@ -355,7 +371,10 @@ size_t CutlassFp4GemmRunner<T, fp4GemmType>::dispatchToArch(T* D, void const* A,
     {
         if (mSm == 103)
         {
-#ifdef COMPILE_BLACKWELL_SM103_TMA_GEMMS
+#ifdef EXCLUDE_SM_103
+            throw std::runtime_error(
+                "[TensorRT-LLM Error][CutlassFp4GemmRunner][GEMM Dispatch] SM103 is excluded from this build");
+#elif defined(COMPILE_BLACKWELL_SM103_TMA_GEMMS)
             return dispatchNVFP4xNVFP4GemmCTAShapeSm10x<cutlass::arch::Sm103, T>(D, A, B, input_sf, weight_sf,
                 global_sf, m, n, k, batch_count, gemmConfig, workspace, workspaceBytes, stream, occupancy);
 #else
@@ -363,7 +382,12 @@ size_t CutlassFp4GemmRunner<T, fp4GemmType>::dispatchToArch(T* D, void const* A,
                 global_sf, m, n, k, batch_count, gemmConfig, workspace, workspaceBytes, stream, occupancy);
 #endif
         }
-        else if (mSm == 100 || mSm == 110)
+        else if (mSm == 100)
+        {
+            return dispatchNVFP4xNVFP4GemmCTAShapeSm10x<cutlass::arch::Sm100, T>(D, A, B, input_sf, weight_sf,
+                global_sf, m, n, k, batch_count, gemmConfig, workspace, workspaceBytes, stream, occupancy);
+        }
+        else if (mSm == 110)
         {
             return dispatchNVFP4xNVFP4GemmCTAShapeSm10x<cutlass::arch::Sm100, T>(D, A, B, input_sf, weight_sf,
                 global_sf, m, n, k, batch_count, gemmConfig, workspace, workspaceBytes, stream, occupancy);
@@ -528,3 +552,4 @@ size_t CutlassFp4GemmRunner<T, fp4GemmType>::getWorkspaceSize(
 } // namespace cutlass_kernels
 } // namespace kernels
 } // namespace tensorrt_llm
+

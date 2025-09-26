@@ -230,6 +230,14 @@ if(USING_OSS_CUTLASS_FP4_GEMM)
   file(GLOB FP4_SRC_CU "${CMAKE_CURRENT_SOURCE_DIR}/fp4_gemm/*.cu")
   add_library(fp4_gemm_src STATIC ${FP4_SRC_CU})
   set_cuda_architectures(fp4_gemm_src 100f 120f)
+  
+  # Define exclusion macros for architectures not supported by FP4 GEMM
+  # Since we only compile for 100f and 120f, exclude SM 103 (SM 110 falls back to SM 100)
+  target_compile_definitions(fp4_gemm_src PRIVATE EXCLUDE_SM_103)
+  
+  # Enable placeholder kernels for unsupported architectures
+  target_compile_definitions(fp4_gemm_src PRIVATE PLACEHOLDER_KERNELS)
+  
   # add_instantiations(fp4_gemm_src ${INSTANTIATION_GENERATION_DIR}/fp4_gemm)
 endif()
 
