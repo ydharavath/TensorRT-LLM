@@ -268,7 +268,7 @@ if(USING_OSS_CUTLASS_MOE_GEMM)
   process_target(_moe_gemm_hopper_fp4 true false)
 
   add_library(_moe_gemm_fp4 OBJECT ${MOE_GEMM_SRC_CU_FP4})
-  set_cuda_architectures(_moe_gemm_fp4 100f 110 120f)
+  set_cuda_architectures(_moe_gemm_fp4 100f 103 110 120f)
   process_target(_moe_gemm_fp4 false true)
 
   add_library(_moe_gemm_fp8 OBJECT ${MOE_GEMM_SRC_CU_FP8})
