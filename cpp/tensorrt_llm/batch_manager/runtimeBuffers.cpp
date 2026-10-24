@@ -51,6 +51,23 @@ using namespace tensorrt_llm::runtime;
 namespace tensorrt_llm::batch_manager
 {
 
+namespace
+{
+// Text position the attention prior is centred on for the first generation step when there is no
+// left offset. At 4 the first syllables fall outside the prior window, so a decoder that is still
+// on them (slow zero-shot onsets) is pushed past the first word; at 1 or 2 the decoder often
+// restarts and repeats the first word. Override with TRT_ATTN_PRIOR_FIRST_FOCUS.
+int attentionPriorFirstFocus()
+{
+    static int const firstFocus = []()
+    {
+        char const* e = std::getenv("TRT_ATTN_PRIOR_FIRST_FOCUS");
+        return e != nullptr ? std::max(0, std::atoi(e)) : 3;
+    }();
+    return firstFocus;
+}
+} // namespace
+
 RuntimeBuffers::RuntimeBuffers(SizeType32 maxBatchSize, SizeType32 maxBeamWidth,
     std::vector<SizeType32> const& maxAttentionWindowVec, SizeType32 maxAttentionWindow, SizeType32 sinkTokenLen,
     TllmRuntime const& runtime, ModelConfig const& modelConfig, WorldConfig const& worldConfig,
@@ -912,8 +929,7 @@ void RuntimeBuffers::setFromInputs(RequestVector const& contextRequests, Request
                 auto const maxLocalFocus = std::max(0, static_cast<int>(encoderOutputLen) - 1);
                 if (leftOffset <= 0)
                 {
-                    constexpr int kDefaultFirstFocus = 4;
-                    return std::min(kDefaultFirstFocus, maxLocalFocus);
+                    return std::min(attentionPriorFirstFocus(), maxLocalFocus);
                 }
                 return leftOffset + std::min(5, maxLocalFocus);
             };
@@ -1195,10 +1211,9 @@ void RuntimeBuffers::processAttentionPriorScores(RequestVector const& contextReq
             auto const leftOffset = static_cast<size_t>(llmReq->getLeftOffset());
             auto const encoderOutputLen = llmReq->getEncoderOutputLen();
             auto const maxLocalFocus = encoderOutputLen > 0 ? static_cast<size_t>(encoderOutputLen - 1) : 0;
-            constexpr int kDefaultFirstFocus = 4;
             auto const initialFocus = leftOffset > 0
                 ? leftOffset + std::min<size_t>(5, maxLocalFocus)
-                : std::min(static_cast<size_t>(kDefaultFirstFocus), maxLocalFocus);
+                : std::min(static_cast<size_t>(attentionPriorFirstFocus()), maxLocalFocus);
             size_t const prevPriorIdx = initialFocus;
 
             int candidateLimit = attentionPriorLookahead;
@@ -1303,10 +1318,9 @@ void RuntimeBuffers::processAttentionPriorScores(RequestVector const& contextReq
         auto const leftOffset = static_cast<size_t>(llmReq->getLeftOffset());
         auto const encoderOutputLen = llmReq->getEncoderOutputLen();
         auto const maxLocalFocus = encoderOutputLen > 0 ? static_cast<size_t>(encoderOutputLen - 1) : 0;
-        constexpr int kDefaultFirstFocus = 4;
         auto const initialFocus = leftOffset > 0
             ? leftOffset + std::min<size_t>(5, maxLocalFocus)
-            : std::min(static_cast<size_t>(kDefaultFirstFocus), maxLocalFocus);
+            : std::min(static_cast<size_t>(attentionPriorFirstFocus()), maxLocalFocus);
         size_t prevPriorIdx = firstPriorStep ? initialFocus : llmReq->getAttentionPriorIdx(modelConfig);
         int const dwellAtPrev = static_cast<int>(llmReq->getAttentionPriorAttendCount());
         auto const selectedScoresOffset = selectScoreRow(scoresOffset, llmReq->getNumSequences()).first;
